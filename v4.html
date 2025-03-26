@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Merge & Extract Columns from Multiple Excel Files</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+    <h2>Upload Multiple Excel Files and Select Columns</h2>
+
+    <input type="file" id="uploadExcel" accept=".xlsx" multiple onchange="loadColumnNames()" /><br><br>
+
+    <div id="columnsList"></div> <!-- Checkbox list will be added here -->
+
+    <button onclick="extractColumns()">Download Merged File</button>
+
+    <script>
+        let mergedData = []; // Store merged rows
+        let columnNames = []; // Store column names
+
+        function loadColumnNames() {
+            let input = document.getElementById('uploadExcel');
+            let files = input.files;
+            
+            if (!files.length) return;
+
+            mergedData = []; // Reset merged data
+            columnNames = []; // Reset column names
+
+            let fileReadPromises = [];
+
+            for (let file of files) {
+                let reader = new FileReader();
+                fileReadPromises.push(new Promise((resolve) => {
+                    reader.onload = function (e) {
+                        let data = new Uint8Array(e.target.result);
+                        let workbook = XLSX.read(data, { type: 'array' });
+
+                        let sheetName = workbook.SheetNames[0]; // First sheet
+                        let worksheet = workbook.Sheets[sheetName];
+
+                        let jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                        if (jsonData.length === 0) {
+                            resolve();
+                            return;
+                        }
+
+                        if (columnNames.length === 0) {
+                            columnNames = jsonData[0]; // Use first file's headers
+                        }
+
+                        mergedData.push(...jsonData.slice(1)); // Merge all rows except header
+                        resolve();
+                    };
+                    reader.readAsArrayBuffer(file);
+                }));
+            }
+
+            Promise.all(fileReadPromises).then(() => {
+                let columnsList = document.getElementById('columnsList');
+                columnsList.innerHTML = "<h3>Select Columns:</h3>";
+
+                columnNames.forEach((colName, index) => {
+                    if (colName) { // Only show valid column names
+                        columnsList.innerHTML += `
+                            <input type="checkbox" id="col_${index}" value="${index}" />
+                            <label for="col_${index}">${colName}</label><br>
+                        `;
+                    }
+                });
+            });
+        }
+
+        function extractColumns() {
+            let selectedColumns = [];
+            let checkboxes = document.querySelectorAll('#columnsList input[type="checkbox"]:checked');
+
+            if (checkboxes.length === 0) {
+                alert("Please select at least one column.");
+                return;
+            }
+
+            checkboxes.forEach(checkbox => {
+                selectedColumns.push(parseInt(checkbox.value));
+            });
+
+            // Extract selected columns
+            let extractedData = [columnNames.filter((_, index) => selectedColumns.includes(index))]; // Header row
+            mergedData.forEach(row => {
+                extractedData.push(selectedColumns.map(colIndex => row[colIndex]));
+            });
+
+            // Create new worksheet
+            let newWorksheet = XLSX.utils.aoa_to_sheet(extractedData);
+            let newWorkbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, "Merged Data");
+
+            // Convert to binary and trigger download
+            let newExcel = XLSX.write(newWorkbook, { bookType: 'xlsx', type: 'array' });
+            let blob = new Blob([newExcel], { type: "application/octet-stream" });
+            let url = URL.createObjectURL(blob);
+            let a = document.createElement("a");
+            a.href = url;
+            a.download = "Merged_Selected_Columns.xlsx";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+    </script>
+
+</body>
+</html>
