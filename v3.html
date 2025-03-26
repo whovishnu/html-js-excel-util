@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select and Extract Columns from Excel</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+    <h2>Upload an Excel file and select columns to extract</h2>
+
+    <input type="file" id="uploadExcel" accept=".xlsx" onchange="loadColumnNames()" /><br><br>
+
+    <div id="columnsList"></div> <!-- Checkbox list will be added here -->
+
+    <button onclick="extractColumns()">Download Selected Columns</button>
+
+    <script>
+        let jsonData = []; // Store the Excel data globally
+
+        function loadColumnNames() {
+            let input = document.getElementById('uploadExcel');
+            if (!input.files.length) return;
+
+            let file = input.files[0];
+            let reader = new FileReader();
+
+            reader.onload = function (e) {
+                let data = new Uint8Array(e.target.result);
+                let workbook = XLSX.read(data, { type: 'array' });
+
+                let sheetName = workbook.SheetNames[0]; // First sheet
+                let worksheet = workbook.Sheets[sheetName];
+
+                jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                if (jsonData.length === 0) {
+                    alert("No data found in the file.");
+                    return;
+                }
+
+                let columnNames = jsonData[0]; // First row contains column names
+
+                let columnsList = document.getElementById('columnsList');
+                columnsList.innerHTML = "<h3>Select Columns:</h3>";
+
+                columnNames.forEach((colName, index) => {
+                    if (colName) { // Only show valid column names
+                        columnsList.innerHTML += `
+                            <input type="checkbox" id="col_${index}" value="${index}" />
+                            <label for="col_${index}">${colName}</label><br>
+                        `;
+                    }
+                });
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        function extractColumns() {
+            let selectedColumns = [];
+            let checkboxes = document.querySelectorAll('#columnsList input[type="checkbox"]:checked');
+
+            if (checkboxes.length === 0) {
+                alert("Please select at least one column.");
+                return;
+            }
+
+            checkboxes.forEach(checkbox => {
+                selectedColumns.push(parseInt(checkbox.value));
+            });
+
+            // Extract only selected columns
+            let extractedData = jsonData.map(row => selectedColumns.map(colIndex => row[colIndex]));
+
+            // Create new worksheet
+            let newWorksheet = XLSX.utils.aoa_to_sheet(extractedData);
+            let newWorkbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, "Selected Columns");
+
+            // Convert to binary and trigger download
+            let newExcel = XLSX.write(newWorkbook, { bookType: 'xlsx', type: 'array' });
+            let blob = new Blob([newExcel], { type: "application/octet-stream" });
+            let url = URL.createObjectURL(blob);
+            let a = document.createElement("a");
+            a.href = url;
+            a.download = "Selected_Columns.xlsx";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+    </script>
+
+</body>
+</html>
