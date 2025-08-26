@@ -3,31 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Merge & Extract Columns from Multiple Excel Files</title>
+    <title>Merge & Extract Columns from Excel</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
-    <h2>Upload Multiple Excel Files and Select Columns</h2>
+    <h2>Upload Multiple Excel Files</h2>
 
     <input type="file" id="uploadExcel" accept=".xlsx" multiple onchange="loadColumnNames()" /><br><br>
 
-    <div id="columnsList"></div> <!-- Checkbox list will be added here -->
+    <button onclick="resetFiles()">Reset Files</button><br><br>
+
+    <h3>Select Columns:</h3>
+    <div id="columnsList"></div> <!-- Checkboxes will be added here -->
 
     <button onclick="extractColumns()">Download Merged File</button>
 
     <script>
-        let mergedData = []; // Store merged rows
-        let columnNames = []; // Store column names
+        let mergedData = []; // Store merged row data
+        let allColumnNames = new Set(); // Store all unique column names (case-insensitive)
+        let columnMapList = []; // Store mapping of each file’s column name positions
+        let fileInput = document.getElementById('uploadExcel');
+
+        // Default columns (normalized to lowercase)
+        let defaultColumns = new Set([
+            "month", "product", "business type", "policy number", "endorsement", 
+            "master holder name", "gwp", "commission", "comm amt", "comm_process_date", 
+            "actual comm rate", "total commission", "policy_reference", "net premium", 
+            "customer name", "lob", "net_premium", "policy_no", "insured_name", 
+            "brokerage invoice value", "total", "policy_endt_no", "totalpayout", 
+            "combine_client_name", "endorsement_ind", "product_name", "total_amt", 
+            "insured_person", "type_of_policy", "policy_num", "endorsement_num", 
+            "total_comm", "insured_customer_name", "pol_num_txt", 
+            "applicable_premium_amount", "commission_rate_used", "endorsement_number", 
+            "month current", "payout applicable on", "final comm to be paid", 
+            "sum of net_prem", "sum of total irda", "sum of additional commission amount", 
+            "policynumber", "premium", "insuredname", "premiumamount", 
+            "commission amount", "commission rate", "client name", "type of business", 
+            "endorsement id", "gross written premium", "totalcommamt", "dpollno", 
+            "policy start date", "total premium", "total commission"
+        ]);
 
         function loadColumnNames() {
-            let input = document.getElementById('uploadExcel');
-            let files = input.files;
+            let files = fileInput.files;
             
             if (!files.length) return;
 
             mergedData = []; // Reset merged data
-            columnNames = []; // Reset column names
+            allColumnNames.clear(); // Reset unique column names
+            columnMapList = []; // Reset column map list
 
             let fileReadPromises = [];
 
@@ -48,10 +72,15 @@
                             return;
                         }
 
-                        if (columnNames.length === 0) {
-                            columnNames = jsonData[0]; // Use first file's headers
-                        }
+                        let fileColumns = jsonData[0].map(col => col.toLowerCase().trim()); // Normalize column names
+                        let columnMap = {}; // Map original column names to lowercase
+                        jsonData[0].forEach((col, index) => {
+                            let lowerCol = col.toLowerCase().trim();
+                            allColumnNames.add(lowerCol);
+                            columnMap[lowerCol] = index; // Store column position
+                        });
 
+                        columnMapList.push(columnMap);
                         mergedData.push(...jsonData.slice(1)); // Merge all rows except header
                         resolve();
                     };
@@ -59,18 +88,21 @@
                 }));
             }
 
-            Promise.all(fileReadPromises).then(() => {
-                let columnsList = document.getElementById('columnsList');
-                columnsList.innerHTML = "<h3>Select Columns:</h3>";
+            Promise.all(fileReadPromises).then(() => renderColumnSelection());
+        }
 
-                columnNames.forEach((colName, index) => {
-                    if (colName) { // Only show valid column names
-                        columnsList.innerHTML += `
-                            <input type="checkbox" id="col_${index}" value="${index}" />
-                            <label for="col_${index}">${colName}</label><br>
-                        `;
-                    }
-                });
+        function renderColumnSelection() {
+            let columnsList = document.getElementById('columnsList');
+            columnsList.innerHTML = ""; // Clear previous selections
+
+            let sortedColumns = Array.from(allColumnNames).sort();
+
+            sortedColumns.forEach((colName) => {
+                let isDefault = defaultColumns.has(colName);
+                columnsList.innerHTML += `
+                    <input type="checkbox" id="col_${colName}" value="${colName}" ${isDefault ? "checked disabled" : ""} />
+                    <label for="col_${colName}">${colName}</label><br>
+                `;
             });
         }
 
@@ -84,13 +116,32 @@
             }
 
             checkboxes.forEach(checkbox => {
-                selectedColumns.push(parseInt(checkbox.value));
+                selectedColumns.push(checkbox.value); // Store selected column names (lowercase)
             });
 
             // Extract selected columns
-            let extractedData = [columnNames.filter((_, index) => selectedColumns.includes(index))]; // Header row
+            let extractedData = [selectedColumns]; // Header row
+
             mergedData.forEach(row => {
-                extractedData.push(selectedColumns.map(colIndex => row[colIndex]));
+                let rowData = [];
+                selectedColumns.forEach(colName => {
+                    let value = "";
+
+                    // Find the correct file mapping for this row
+                    for (let columnMap of columnMapList) {
+                        if (colName in columnMap) {
+                            let colIndex = columnMap[colName];
+                            if (row[colIndex] !== undefined) {
+                                value = row[colIndex];
+                                break; // Stop once we find the value in any file
+                            }
+                        }
+                    }
+
+                    rowData.push(value);
+                });
+
+                extractedData.push(rowData);
             });
 
             // Create new worksheet
@@ -108,6 +159,14 @@
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
+        }
+
+        function resetFiles() {
+            fileInput.value = ""; // Clear file input
+            document.getElementById('columnsList').innerHTML = ""; // Clear column selection
+            mergedData = [];
+            allColumnNames.clear();
+            columnMapList = [];
         }
     </script>
 

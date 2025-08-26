@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Update XLSX Selected Columns</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+    <h2>Upload and Modify Excel File</h2>
+    <input type="file" id="uploadExcel" accept=".xlsx" />
+    <button onclick="processExcel()">Update Columns & Download</button>
+
+    <script>
+        function processExcel() {
+            let input = document.getElementById('uploadExcel');
+            if (!input.files.length) {
+                alert("Please select an Excel file.");
+                return;
+            }
+
+            let file = input.files[0];
+            let reader = new FileReader();
+
+            reader.onload = function (e) {
+                let data = new Uint8Array(e.target.result);
+                let workbook = XLSX.read(data, { type: 'array' });
+
+                // Assuming first sheet
+                let sheetName = workbook.SheetNames[0];
+                let worksheet = workbook.Sheets[sheetName];
+
+                // Convert sheet to JSON
+                let jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                // Specify the column indexes to update (e.g., 1st and 3rd columns: index 0 and 2)
+                let columnsToUpdate = [0, 2]; 
+
+                // Update only selected columns
+                for (let i = 1; i < jsonData.length; i++) { 
+                    columnsToUpdate.forEach(col => {
+                        if (jsonData[i][col] !== undefined) {
+                            jsonData[i][col] = "Updated"; // Modify column data
+                        }
+                    });
+                }
+
+                // Convert JSON back to worksheet
+                let newWorksheet = XLSX.utils.aoa_to_sheet(jsonData);
+                workbook.Sheets[sheetName] = newWorksheet;
+
+                // Convert workbook to binary and trigger download
+                let newExcel = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+                let blob = new Blob([newExcel], { type: "application/octet-stream" });
+                let url = URL.createObjectURL(blob);
+                let a = document.createElement("a");
+                a.href = url;
+                a.download = "Updated_File.xlsx";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+    </script>
+
+</body>
+</html>

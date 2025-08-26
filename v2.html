@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extract Specific Column from Excel</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+    <h2>Select and Extract a Column from Excel</h2>
+
+    <input type="file" id="uploadExcel" accept=".xlsx" /><br><br>
+
+    <label for="columnIndex">Enter Column Index (A=0, B=1, C=2...):</label>
+    <input type="number" id="columnIndex" min="0" placeholder="Column Index" /><br><br>
+
+    <button onclick="extractColumn()">Download Selected Column</button>
+
+    <script>
+        function extractColumn() {
+            let input = document.getElementById('uploadExcel');
+            let columnIndex = document.getElementById('columnIndex').value;
+
+            if (!input.files.length) {
+                alert("Please select an Excel file.");
+                return;
+            }
+            if (columnIndex === "") {
+                alert("Please enter a column index.");
+                return;
+            }
+
+            columnIndex = parseInt(columnIndex);
+
+            let file = input.files[0];
+            let reader = new FileReader();
+
+            reader.onload = function (e) {
+                let data = new Uint8Array(e.target.result);
+                let workbook = XLSX.read(data, { type: 'array' });
+
+                let sheetName = workbook.SheetNames[0]; // First sheet
+                let worksheet = workbook.Sheets[sheetName];
+
+                let jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                // Extract only the selected column
+                let extractedData = jsonData.map(row => [row[columnIndex]]);
+
+                // Create new worksheet
+                let newWorksheet = XLSX.utils.aoa_to_sheet(extractedData);
+                let newWorkbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, "Selected Column");
+
+                // Convert workbook to binary and trigger download
+                let newExcel = XLSX.write(newWorkbook, { bookType: 'xlsx', type: 'array' });
+                let blob = new Blob([newExcel], { type: "application/octet-stream" });
+                let url = URL.createObjectURL(blob);
+                let a = document.createElement("a");
+                a.href = url;
+                a.download = "Extracted_Column.xlsx";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+    </script>
+
+</body>
+</html>
